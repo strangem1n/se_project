@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { 
   Plus, 
@@ -9,7 +9,9 @@ import {
   Settings,
   FileText,
   Brain,
-  Server
+  Server,
+  Download,
+  Eye
 } from 'lucide-react';
 import type { ChatAgent, Agent } from '../types';
 import { 
@@ -23,11 +25,13 @@ import {
 } from '../components/ui';
 import { useSearch } from '../hooks';
 import { mockChatAgents } from '../data';
+import AgentSettingsModal from '../components/AgentSettingsModal';
 
 export default function ChatAgents() {
-  const navigate = useNavigate();
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>(mockChatAgents);
   const [loading, setLoading] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
 
   const { searchTerm, setSearchTerm, filteredItems: filteredAgents } = useSearch(
     chatAgents,
@@ -49,7 +53,52 @@ export default function ChatAgents() {
   };
 
   const handleOpenSettings = (agent: Agent) => {
-    navigate(`/admin/chat-agents/edit/${agent.agentId}`);
+    setSelectedAgent(agent);
+    setIsModalOpen(true);
+  };
+
+  const handleCreateAgent = () => {
+    setSelectedAgent(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveAgent = (agent: Agent) => {
+    if (selectedAgent) {
+      // 수정
+      setChatAgents(prev => prev.map(chatAgent => ({
+        ...chatAgent,
+        agents: chatAgent.agents.map(a => 
+          a.agentId === agent.agentId ? agent : a
+        )
+      })));
+    } else {
+      // 생성
+      const newChatAgent: ChatAgent = {
+        chatagentsId: `chatagents_${Date.now()}`,
+        serviceId: `service_${Date.now()}`,
+        state: 'active',
+        agents: [agent]
+      };
+      setChatAgents(prev => [...prev, newChatAgent]);
+    }
+  };
+
+  const handleDownloadDocument = (document: any) => {
+    // 실제로는 API를 통해 파일을 다운로드
+    console.log('Downloading document:', document.documentName);
+  };
+
+  const handleDeleteDocument = (agentId: string, docId: string) => {
+    if (confirm('이 문서를 삭제하시겠습니까?')) {
+      setChatAgents(prev => prev.map(chatAgent => ({
+        ...chatAgent,
+        agents: chatAgent.agents.map(agent => 
+          agent.agentId === agentId 
+            ? { ...agent, documents: agent.documents?.filter(doc => doc.docsId !== docId) || [] }
+            : agent
+        )
+      })));
+    }
   };
 
   const getStateVariant = (state: string) => {
@@ -88,7 +137,7 @@ export default function ChatAgents() {
         title="챗 에이전트"
         description="챗봇 에이전트를 관리하고 모니터링하세요."
       >
-        <Button onClick={() => navigate('/admin/chat-agents/create')}>
+        <Button onClick={handleCreateAgent}>
           <Plus className="h-4 w-4 mr-2" />
           새 에이전트
         </Button>
@@ -177,7 +226,7 @@ export default function ChatAgents() {
             
             {/* 에이전트 상세 정보 */}
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-3 gap-4 mb-4">
                 <div>
                   <dt className="text-sm font-medium text-gray-500">프롬프트</dt>
                   <dd className="mt-1 text-sm text-gray-900">
@@ -203,13 +252,42 @@ export default function ChatAgents() {
                 <div>
                   <dt className="text-sm font-medium text-gray-500 mb-2 flex items-center">
                     <FileText className="h-4 w-4 mr-1" />
-                    연결된 문서 ({agent.agents[0]?.connectedDocuments?.length || 0}개)
+                    첨부된 문서 ({agent.agents[0]?.documents?.length || 0}개)
                   </dt>
                   <dd className="text-sm text-gray-900">
-                    {agent.agents[0]?.connectedDocuments?.length ? 
-                      agent.agents[0].connectedDocuments.join(', ') : 
-                      '연결된 문서 없음'
-                    }
+                    {agent.agents[0]?.documents?.length ? (
+                      <div className="space-y-2">
+                        {agent.agents[0].documents.map((doc) => (
+                          <div key={doc.docsId} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                            <div className="flex items-center space-x-2">
+                              <FileText className="h-4 w-4 text-gray-400" />
+                              <span className="text-sm">{doc.documentName}</span>
+                              <span className="text-xs text-gray-500">({doc.type})</span>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownloadDocument(doc)}
+                                title="다운로드"
+                              >
+                                <Download className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteDocument(agent.agents[0].agentId, doc.docsId)}
+                                title="삭제"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      '첨부된 문서 없음'
+                    )}
                   </dd>
                 </div>
                 <div>
@@ -248,9 +326,17 @@ export default function ChatAgents() {
           title="에이전트가 없습니다"
           description="새로운 챗 에이전트를 생성해보세요."
           actionLabel="새 에이전트 생성"
-          onAction={() => navigate('/admin/chat-agents/create')}
+          onAction={handleCreateAgent}
         />
       )}
+
+      {/* 에이전트 설정 모달 */}
+      <AgentSettingsModal
+        isOpen={isModalOpen}
+        agent={selectedAgent}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSaveAgent}
+      />
     </div>
   );
 }

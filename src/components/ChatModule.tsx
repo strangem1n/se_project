@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, Bot, User, Settings, Minimize2, Maximize2, ArrowLeft, RotateCcw, Trash2, History, X, MessageSquare } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Send, Bot, Settings, Minimize2, Maximize2, ArrowLeft, RotateCcw, Trash2, History, X, MessageSquare } from 'lucide-react';
 import { Button } from './ui';
+import MessageBubble from './MessageBubble';
 import type { ChatMessage } from '../types';
 
 interface ChatModuleProps {
@@ -28,6 +27,19 @@ export default function ChatModule({
   const [isMinimized, setIsMinimized] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 챗봇 페이지일 때 부모 요소의 스크롤 비활성화
+  useEffect(() => {
+    if (!isEmbedded) {
+      const mainElement = document.querySelector('main');
+      if (mainElement) {
+        mainElement.style.overflow = 'hidden';
+        return () => {
+          mainElement.style.overflow = '';
+        };
+      }
+    }
+  }, [isEmbedded]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -171,9 +183,11 @@ console.log("챗봇 응답");
   }
 
   return (
-    <div className={`${isEmbedded ? 'h-full' : 'h-screen'} flex flex-col bg-white ${className}`}>
-      {/* 헤더 */}
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+    <div className={`h-full flex flex-col bg-gray-50 ${className}`}>
+      <div className="flex-1 flex items-center justify-center p-6 min-h-0">
+        <div className="w-full max-w-4xl h-full bg-white rounded-lg shadow-lg flex flex-col min-h-0">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between p-4 border-b bg-white rounded-t-lg">
         <div className="flex items-center">
           {!isEmbedded && (
             <Button
@@ -223,38 +237,38 @@ console.log("챗봇 응답");
         </div>
       </div>
 
-      {/* 대화 내역 패널 */}
-      {showHistory && (
-        <div className="border-b bg-gray-50 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-medium text-gray-900">대화 내역</h3>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowHistory(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="space-y-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleLoadHistory}
-              className="w-full justify-start"
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              이전 대화 불러오기
-            </Button>
-            <p className="text-xs text-gray-500">
-              현재 {messages.length}개의 메시지가 있습니다
-            </p>
-          </div>
-        </div>
-      )}
+          {/* 대화 내역 패널 */}
+          {showHistory && (
+            <div className="border-b bg-gray-50 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium text-gray-900">대화 내역</h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowHistory(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadHistory}
+                  className="w-full justify-start"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  이전 대화 불러오기
+                </Button>
+                <p className="text-xs text-gray-500">
+                  현재 {messages.length}개의 메시지가 있습니다
+                </p>
+              </div>
+            </div>
+          )}
 
-      {/* 메시지 영역 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* 메시지 영역 */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar p-4 space-y-4 min-h-0">
         {messages.length === 0 && (
           <div className="text-center py-8">
             <Bot className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -272,55 +286,7 @@ console.log("챗봇 응답");
             key={message.id}
             className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
           >
-            {message.sender === 'user' ? (
-              // 사용자 메시지 - 말풍선 스타일
-              <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-blue-600 text-white">
-                <div className="flex items-start">
-                  <User className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm">{message.content}</p>
-                    <p className="text-xs opacity-70 mt-1">
-                      {message.timestamp.toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              // 봇 메시지 - 마크다운 스타일
-              <div className="max-w-4xl w-full">
-                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                  <div className="flex items-start mb-3">
-                    <Bot className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0 text-blue-600" />
-                    <div className="flex-1">
-                      <div className="prose prose-sm max-w-none">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            h1: ({ children }: { children: React.ReactNode }) => <h1 className="text-xl font-bold text-gray-900 mb-2">{children}</h1>,
-                            h2: ({ children }: { children: React.ReactNode }) => <h2 className="text-lg font-semibold text-gray-900 mb-2">{children}</h2>,
-                            h3: ({ children }: { children: React.ReactNode }) => <h3 className="text-base font-medium text-gray-900 mb-1">{children}</h3>,
-                            p: ({ children }: { children: React.ReactNode }) => <p className="text-gray-700 mb-2">{children}</p>,
-                            ul: ({ children }: { children: React.ReactNode }) => <ul className="list-disc list-inside mb-2 text-gray-700">{children}</ul>,
-                            ol: ({ children }: { children: React.ReactNode }) => <ol className="list-decimal list-inside mb-2 text-gray-700">{children}</ol>,
-                            li: ({ children }: { children: React.ReactNode }) => <li className="mb-1">{children}</li>,
-                            blockquote: ({ children }: { children: React.ReactNode }) => <blockquote className="border-l-4 border-blue-200 pl-4 italic text-gray-600 mb-2">{children}</blockquote>,
-                            code: ({ children }: { children: React.ReactNode }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
-                            pre: ({ children }: { children: React.ReactNode }) => <pre className="bg-gray-100 p-3 rounded-lg overflow-x-auto mb-2">{children}</pre>,
-                            strong: ({ children }: { children: React.ReactNode }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-                            em: ({ children }: { children: React.ReactNode }) => <em className="italic">{children}</em>,
-                          }}
-                        >
-                          {message.content}
-                        </ReactMarkdown>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {message.timestamp.toLocaleTimeString()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <MessageBubble message={message} />
           </div>
         ))}
 
@@ -345,25 +311,27 @@ console.log("챗봇 응답");
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 입력 영역 */}
-      <div className="border-t p-4">
-        <div className="flex space-x-2">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="메시지를 입력하세요..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            disabled={isLoading}
-          />
-          <Button
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isLoading}
-            className="px-4"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          {/* 입력 영역 */}
+          <div className="border-t p-4 bg-white rounded-b-lg">
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="메시지를 입력하세요..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isLoading}
+              />
+              <Button
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || isLoading}
+                className="px-4"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

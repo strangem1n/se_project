@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Server, 
@@ -25,9 +24,9 @@ import {
 } from '../components/ui';
 import { useAsyncData, useSearch, useModal } from '../hooks';
 import { mockMCPServers } from '../data';
+import MCPServerModal from '../components/MCPServerModal';
 
 export default function MCPServers() {
-  const navigate = useNavigate();
   const { data: servers = [], loading } = useAsyncData<MCPServer[]>(() => mockMCPServers);
 
   const { searchTerm, setSearchTerm, filteredItems: filteredServers } = useSearch(
@@ -37,6 +36,8 @@ export default function MCPServers() {
 
   const toolsModal = useModal();
   const [selectedServer, setSelectedServer] = useState<MCPServer | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedMCPServer, setSelectedMCPServer] = useState<MCPServer | null>(null);
 
   const handleDelete = (mcpId: string) => {
     if (confirm('정말로 이 MCP 서버를 삭제하시겠습니까?')) {
@@ -56,7 +57,19 @@ export default function MCPServers() {
   };
 
   const handleOpenSettings = (mcpId: string) => {
-    navigate(`/admin/mcp-servers/edit/${mcpId}`);
+    const server = servers.find(s => s.mcpId === mcpId);
+    setSelectedMCPServer(server || null);
+    setIsModalOpen(true);
+  };
+
+  const handleCreateServer = () => {
+    setSelectedMCPServer(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveServer = (server: MCPServer) => {
+    // 실제로는 API 호출
+    console.log('Save MCP server:', server);
   };
 
   const getStatusVariant = (useable: boolean) => {
@@ -81,7 +94,7 @@ export default function MCPServers() {
         title="MCP 서버"
         description="MCP 서버를 관리하고 도구를 확인하세요."
       >
-        <Button onClick={() => navigate('/admin/mcp-servers/create')}>
+        <Button onClick={handleCreateServer}>
           <Plus className="h-4 w-4 mr-2" />
           새 서버
         </Button>
@@ -185,7 +198,7 @@ export default function MCPServers() {
           title="MCP 서버가 없습니다"
           description="새로운 MCP 서버를 추가해보세요."
           actionLabel="새 서버 추가"
-          onAction={() => navigate('/admin/mcp-servers/create')}
+          onAction={handleCreateServer}
         />
       )}
 
@@ -221,6 +234,13 @@ export default function MCPServers() {
         )}
       </Modal>
 
+      {/* MCP 서버 모달 */}
+      <MCPServerModal
+        isOpen={isModalOpen}
+        mcpServer={selectedMCPServer}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSaveServer}
+      />
     </div>
   );
 }

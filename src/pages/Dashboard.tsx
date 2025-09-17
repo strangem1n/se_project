@@ -86,7 +86,7 @@ export default function Dashboard() {
       />
 
       {/* 통계 카드 */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-4 gap-5">
         {statCards.map((stat) => (
           <Card key={stat.name}>
             <div className="flex items-center">
@@ -116,7 +116,7 @@ export default function Dashboard() {
       </div>
 
       {/* 최근 활동 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-6">
         <Card>
           <h3 className="text-lg font-medium text-gray-900 mb-4">최근 활동</h3>
           <div className="space-y-4">

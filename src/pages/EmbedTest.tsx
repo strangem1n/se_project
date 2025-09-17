@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Code, Copy, Check } from 'lucide-react';
+import { ExternalLink, Code, Copy, Check } from 'lucide-react';
 import { PageHeader, Card, Button } from '../components/ui';
 
 export default function EmbedTest() {
@@ -35,33 +35,10 @@ export default function EmbedTest() {
   const currentUrl = `${window.location.origin}/embed/chat/${selectedService}`;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 헤더 */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/admin')}
-                className="mr-4"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                관리자로
-              </Button>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">임베드 테스트</h1>
-                <p className="text-sm text-gray-500">챗봇이 외부 사이트에서 어떻게 보이는지 테스트하세요</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="bg-gray-50">
       {/* 메인 콘텐츠 */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-2 gap-8">
           {/* 설정 패널 */}
           <div className="space-y-6">
             <Card>
@@ -264,3 +241,4 @@ export default function EmbedTest() {
     </div>
   );
 }
+

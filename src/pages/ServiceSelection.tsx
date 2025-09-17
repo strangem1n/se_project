@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, ArrowRight, Users, Settings, BarChart3 } from 'lucide-react';
+import { MessageSquare, ArrowRight, Users, BarChart3 } from 'lucide-react';
 import { PageHeader, Card, Button, SearchInput, StatusBadge, EmptyState } from '../components/ui';
 import { useSearch } from '../hooks';
 import { mockChatAgents } from '../data';
@@ -53,36 +53,9 @@ export default function ServiceSelection() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 헤더 */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <MessageSquare className="h-8 w-8 text-blue-600" />
-              </div>
-              <div className="ml-3">
-                <h1 className="text-xl font-semibold text-gray-900">챗봇 서비스</h1>
-                <p className="text-sm text-gray-500">원하는 서비스를 선택하여 시작하세요</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate('/admin')}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                관리자
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="bg-gray-50">
       {/* 메인 콘텐츠 */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-8">
         {/* 검색 */}
         <div className="mb-8">
           <div className="max-w-md">
@@ -95,7 +68,7 @@ export default function ServiceSelection() {
         </div>
 
         {/* 서비스 목록 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-3 gap-6">
           {filteredServices.map((service) => (
             <Card 
               key={service.serviceId}

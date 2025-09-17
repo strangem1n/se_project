@@ -173,7 +173,7 @@ export default function Models() {
       {/* 파인튜닝 탭 */}
       {activeTab === 'finetune' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-3 gap-6">
             {/* 파인튜닝 */}
             <Card>
               <div className="flex items-center space-x-3 mb-4">

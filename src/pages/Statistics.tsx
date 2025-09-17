@@ -85,7 +85,7 @@ export default function Statistics() {
 
       {/* 필터 및 날짜 범위 */}
       <Card>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">지표 선택</label>
             <select
@@ -120,7 +120,7 @@ export default function Statistics() {
       </Card>
 
       {/* 요약 통계 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-4 gap-6">
         <Card>
           <div className="flex items-center">
             <div className={`p-3 rounded-md ${stats.color}`}>
@@ -168,7 +168,7 @@ export default function Statistics() {
       </div>
 
       {/* 상세 통계 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-6">
         {/* 사용량 분포 */}
         <Card>
           <h3 className="text-lg font-medium text-gray-900 mb-4">

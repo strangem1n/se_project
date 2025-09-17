@@ -16,7 +16,7 @@ export interface Agent {
   description: string;
   isConfirmed: boolean;
   // 연결된 리소스들
-  connectedDocuments: string[]; // 연결된 문서 ID들
+  documents: Document[]; // 첨부된 문서들
   connectedModels: string[]; // 연결된 모델 ID들
   connectedMCPServers: string[]; // 연결된 MCP 서버 ID들
 }
@@ -42,10 +42,10 @@ export interface ChatMessage {
 // 문서 타입
 export interface Document {
   docsId: string;
-  serviceId: string;
   documentName: string;
   type: 'faq' | 'guide';
-  documentPath: string;
+  file: File;
+  uploadedAt: Date;
 }
 
 // 모델 타입

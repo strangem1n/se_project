@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Edit, 
@@ -21,10 +20,12 @@ import {
 } from '../components/ui';
 import { useAsyncData, useSearch } from '../hooks';
 import { mockUsers } from '../data';
+import UserModal from '../components/UserModal';
 
 export default function Users() {
-  const navigate = useNavigate();
   const { data: users = [], loading } = useAsyncData<User[]>(() => mockUsers);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   const { searchTerm, setSearchTerm, filteredItems: filteredUsers } = useSearch(
     users,
@@ -39,7 +40,18 @@ export default function Users() {
   };
 
   const handleEdit = (user: User) => {
-    navigate(`/admin/users/edit/${user.memberId}`);
+    setSelectedUser(user);
+    setIsModalOpen(true);
+  };
+
+  const handleCreateUser = () => {
+    setSelectedUser(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveUser = (user: User) => {
+    // 실제로는 API 호출
+    console.log('Save user:', user);
   };
 
   const getRoleVariant = (role: string) => {
@@ -91,7 +103,7 @@ export default function Users() {
         title="사용자 관리"
         description="시스템 사용자와 권한을 관리하세요."
       >
-        <Button onClick={() => navigate('/admin/users/create')}>
+        <Button onClick={handleCreateUser}>
           <Plus className="h-4 w-4 mr-2" />
           새 사용자
         </Button>
@@ -165,9 +177,17 @@ export default function Users() {
           title="사용자가 없습니다"
           description="새로운 사용자를 추가해보세요."
           actionLabel="새 사용자 추가"
-          onAction={() => navigate('/admin/users/create')}
+          onAction={handleCreateUser}
         />
       )}
+
+      {/* 사용자 모달 */}
+      <UserModal
+        isOpen={isModalOpen}
+        user={selectedUser}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSaveUser}
+      />
     </div>
   );
 }
