@@ -20,8 +20,8 @@ const navigation = [
   { name: '대시보드', href: '/admin/dashboard', icon: LayoutDashboard },
   { name: '챗 에이전트', href: '/admin/chat-agents', icon: MessageSquare },
   { name: '모델 관리', href: '/admin/models', icon: Brain },
-  { name: '사용자 관리', href: '/admin/users', icon: Users },
   { name: 'MCP 서버', href: '/admin/mcp-servers', icon: Server },
+  { name: '사용자 관리', href: '/admin/users', icon: Users },
   { name: '통계', href: '/admin/statistics', icon: BarChart3 },
   { name: '임베드 테스트', href: '/admin/embed-test', icon: Monitor },
 ];

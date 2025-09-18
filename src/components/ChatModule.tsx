@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Send, Bot, Settings, Minimize2, Maximize2, ArrowLeft, RotateCcw, Trash2, History, X, MessageSquare } from 'lucide-react';
 import { Button } from './ui';
 import MessageBubble from './MessageBubble';
-import type { ChatMessage } from '../types';
+import ToolForm from './ToolForm';
+import ToolApproval from './ToolApproval';
+import type { ChatMessage, ChatRequest, ChatResponse, ToolFormSchema } from '../types';
 
 interface ChatModuleProps {
   serviceId: string;
@@ -27,6 +29,13 @@ export default function ChatModule({
   const [isMinimized, setIsMinimized] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // 챗봇 관련 상태
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [currentResumeKey, setCurrentResumeKey] = useState<string | null>(null);
+  const [pendingToolResponse, setPendingToolResponse] = useState<ChatResponse | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string>('');
+  const [isStreaming, setIsStreaming] = useState(false);
 
   // 챗봇 페이지일 때 부모 요소의 스크롤 비활성화
   useEffect(() => {
@@ -49,8 +58,103 @@ export default function ChatModule({
     scrollToBottom();
   }, [messages]);
 
+  // SSE 스트리밍 처리 함수
+  const handleSSEStream = async (chatagentId: string, requestData: ChatRequest) => {
+    try {
+      // fetch-event-source 라이브러리가 설치되지 않은 경우를 대비한 폴백
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/be/v1/chatagents/${chatagentId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No reader available');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      setIsStreaming(true);
+      setStreamingContent('');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              const chatResponse: ChatResponse = data;
+              
+              if (chatResponse.isStream && chatResponse.sseState === 'RUNNING') {
+                // 스트리밍 중인 경우
+                setStreamingContent(prev => prev + chatResponse.content);
+              } else if (chatResponse.sseState === 'END') {
+                // 스트리밍 완료
+                setIsStreaming(false);
+                
+                // 최종 메시지 추가
+                const finalMessage: ChatMessage = {
+                  id: `msg_${Date.now()}`,
+                  sender: 'bot',
+                  content: streamingContent + chatResponse.content,
+                  timestamp: new Date(),
+                };
+                
+                setMessages(prev => [...prev, finalMessage]);
+                setStreamingContent('');
+                
+                // taskId와 resumeKey 업데이트
+                if (chatResponse.taskId) {
+                  setCurrentTaskId(chatResponse.taskId);
+                }
+                if (chatResponse.resumeKey) {
+                  setCurrentResumeKey(chatResponse.resumeKey);
+                }
+                
+                // interrupt 타입인 경우 도구 처리
+                if (chatResponse.type === 'interrupt' && chatResponse.payload) {
+                  setPendingToolResponse(chatResponse);
+                }
+              }
+            } catch (error) {
+              console.error('Error parsing SSE data:', error);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('SSE streaming error:', error);
+      setIsStreaming(false);
+      setStreamingContent('');
+      
+      // 에러 메시지 추가
+      const errorMessage: ChatMessage = {
+        id: `msg_${Date.now()}`,
+        sender: 'bot',
+        content: '죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    }
+  };
+
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    if (!inputValue.trim() || isLoading || isStreaming) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -60,39 +164,36 @@ export default function ChatModule({
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const messageContent = inputValue;
     setInputValue('');
     setIsLoading(true);
 
-    // 실제로는 API 호출
-    setTimeout(() => {
-      const botMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        content: `# ${serviceId} 서비스 답변
+    try {
+      // 챗봇 API 요청 데이터 준비
+      const requestData: ChatRequest = {
+        userId: 'user-1', // 실제로는 로그인한 사용자 ID
+        type: 'chat',
+        content: messageContent,
+        resumeKey: currentResumeKey || undefined,
+        taskId: currentTaskId || undefined,
+      };
 
-안녕하세요! **${serviceId}** 서비스입니다.
-
-"${inputValue}"에 대한 답변을 드리겠습니다:
-
-## 주요 내용
-- 첫 번째 포인트
-- 두 번째 포인트  
-- 세 번째 포인트
-
-### 추가 정보
-> 이는 예시 답변입니다. 실제로는 AI가 생성한 답변이 표시됩니다.
-
-\`\`\`javascript
-// 코드 예시
-console.log("챗봇 응답");
-\`\`\`
-
-더 궁금한 것이 있으시면 언제든지 물어보세요! 😊`,
+      // SSE 스트리밍 처리
+      await handleSSEStream(serviceId, requestData);
+    } catch (error) {
+      console.error('메시지 전송 실패:', error);
+      
+      // 에러 메시지 추가
+      const errorMessage: ChatMessage = {
+        id: `msg_${Date.now()}`,
         sender: 'bot',
+        content: '죄송합니다. 메시지 전송 중 오류가 발생했습니다.',
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, botMessage]);
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -100,6 +201,92 @@ console.log("챗봇 응답");
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  // 도구 승인 처리
+  const handleToolApprove = async () => {
+    if (!pendingToolResponse) return;
+
+    try {
+      const requestData: ChatRequest = {
+        userId: 'user-1',
+        type: 'approve',
+        content: 'yes',
+        resumeKey: currentResumeKey || undefined,
+        taskId: currentTaskId || undefined,
+        payload: {
+          ...pendingToolResponse.payload,
+          currentValues: { ...pendingToolResponse.payload?.currentValues, response: 'yes' }
+        }
+      };
+
+      setPendingToolResponse(null);
+      setIsLoading(true);
+      await handleSSEStream(serviceId, requestData);
+    } catch (error) {
+      console.error('도구 승인 실패:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 도구 거부 처리
+  const handleToolReject = async () => {
+    if (!pendingToolResponse) return;
+
+    try {
+      const requestData: ChatRequest = {
+        userId: 'user-1',
+        type: 'approve',
+        content: 'no',
+        resumeKey: currentResumeKey || undefined,
+        taskId: currentTaskId || undefined,
+        payload: {
+          ...pendingToolResponse.payload,
+          currentValues: { ...pendingToolResponse.payload?.currentValues, response: 'no' }
+        }
+      };
+
+      setPendingToolResponse(null);
+      setIsLoading(true);
+      await handleSSEStream(serviceId, requestData);
+    } catch (error) {
+      console.error('도구 거부 실패:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 도구 폼 제출 처리
+  const handleToolFormSubmit = async (values: Record<string, any>) => {
+    if (!pendingToolResponse) return;
+
+    try {
+      const requestData: ChatRequest = {
+        userId: 'user-1',
+        type: 'input',
+        content: JSON.stringify(values),
+        resumeKey: currentResumeKey || undefined,
+        taskId: currentTaskId || undefined,
+        payload: {
+          ...pendingToolResponse.payload,
+          currentValues: values
+        }
+      };
+
+      setPendingToolResponse(null);
+      setIsLoading(true);
+      await handleSSEStream(serviceId, requestData);
+    } catch (error) {
+      console.error('도구 폼 제출 실패:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 도구 폼 취소 처리
+  const handleToolFormCancel = () => {
+    setPendingToolResponse(null);
   };
 
   const toggleMinimize = () => {
@@ -290,7 +477,54 @@ console.log("챗봇 응답");
           </div>
         ))}
 
-        {isLoading && (
+        {/* 스트리밍 중인 메시지 */}
+        {isStreaming && streamingContent && (
+          <div className="flex justify-start">
+            <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm max-w-4xl w-full">
+              <div className="flex items-start mb-3">
+                <Bot className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0 text-blue-600" />
+                <div className="flex-1">
+                  <div className="prose prose-sm max-w-none">
+                    <div className="text-gray-700 mb-2 whitespace-pre-wrap">
+                      {streamingContent}
+                      <span className="animate-pulse">|</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 도구 승인 UI */}
+        {pendingToolResponse?.payload?.type === 'tool_approve' && (
+          <div className="flex justify-start">
+            <div className="max-w-md">
+              <ToolApproval
+                toolName={pendingToolResponse.payload.tool}
+                onApprove={handleToolApprove}
+                onReject={handleToolReject}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 도구 폼 UI */}
+        {pendingToolResponse?.payload?.type === 'tool_input_form' && (
+          <div className="flex justify-start">
+            <div className="max-w-md w-full">
+              <ToolForm
+                schema={pendingToolResponse.payload.schema as ToolFormSchema}
+                currentValues={pendingToolResponse.payload.currentValues || {}}
+                onSubmit={handleToolFormSubmit}
+                onCancel={handleToolFormCancel}
+                toolName={pendingToolResponse.payload.tool}
+              />
+            </div>
+          </div>
+        )}
+
+        {isLoading && !isStreaming && (
           <div className="flex justify-start">
             <div className="max-w-4xl w-full">
               <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
@@ -319,13 +553,13 @@ console.log("챗봇 응답");
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="메시지를 입력하세요..."
+                placeholder={isStreaming ? "응답을 받는 중..." : "메시지를 입력하세요..."}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={isLoading}
+                disabled={isLoading || isStreaming}
               />
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isLoading}
+                disabled={!inputValue.trim() || isLoading || isStreaming}
                 className="px-4"
               >
                 <Send className="h-4 w-4" />

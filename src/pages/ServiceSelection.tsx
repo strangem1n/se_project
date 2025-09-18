@@ -1,22 +1,23 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageSquare, ArrowRight, Users, BarChart3 } from 'lucide-react';
-import { PageHeader, Card, Button, SearchInput, StatusBadge, EmptyState } from '../components/ui';
+import { Card, SearchInput, StatusBadge, EmptyState } from '../components/ui';
 import { useSearch } from '../hooks';
-import { mockChatAgents } from '../data';
+import { mockAgents } from '../data/chatAgents';
 
 export default function ServiceSelection() {
   const navigate = useNavigate();
   const [selectedService, setSelectedService] = useState<string | null>(null);
 
   // 서비스 목록 생성 (챗 에이전트에서 추출)
-  const services = mockChatAgents.map(chatAgent => ({
-    serviceId: chatAgent.serviceId,
-    name: chatAgent.agents[0]?.name || '서비스',
-    description: chatAgent.agents[0]?.description || '챗봇 서비스',
-    status: chatAgent.state,
-    agentCount: chatAgent.agents.length,
+  const services = mockAgents.map(agent => ({
+    serviceId: agent.id,
+    name: agent.serviceName,
+    description: agent.description || '챗봇 서비스',
+    status: agent.state,
+    agentCount: 1, // 각 에이전트는 개별 서비스
     lastActive: '방금 전',
+    logoUrl: agent.logoUrl, // 로고 URL 추가
   }));
 
   const { searchTerm, setSearchTerm, filteredItems: filteredServices } = useSearch(
@@ -82,8 +83,16 @@ export default function ServiceSelection() {
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <MessageSquare className="h-6 w-6 text-blue-600" />
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center overflow-hidden">
+                      {service.logoUrl ? (
+                        <img
+                          src={service.logoUrl}
+                          alt={`${service.name} 로고`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <MessageSquare className="h-6 w-6 text-blue-600" />
+                      )}
                     </div>
                     <div className="ml-3">
                       <h3 className="text-lg font-semibold text-gray-900">

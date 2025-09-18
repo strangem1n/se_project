@@ -1,19 +1,14 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Plus, 
   Play, 
   Pause, 
   Trash2, 
   MessageSquare,
-  Settings,
-  FileText,
-  Brain,
-  Server,
-  Download,
-  Eye
+  Settings
 } from 'lucide-react';
-import type { ChatAgent, Agent } from '../types';
+import type { Agent } from '../types';
 import { 
   PageHeader, 
   Card, 
@@ -24,32 +19,96 @@ import {
   LoadingPage 
 } from '../components/ui';
 import { useSearch } from '../hooks';
-import { mockChatAgents } from '../data';
+import { mockAgents } from '../data/chatAgents';
 import AgentSettingsModal from '../components/AgentSettingsModal';
+import { chatAgentApi } from '../services/api';
 
 export default function ChatAgents() {
-  const [chatAgents, setChatAgents] = useState<ChatAgent[]>(mockChatAgents);
+  const [agents, setAgents] = useState<Agent[]>(mockAgents);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [togglingStates, setTogglingStates] = useState<Set<string>>(new Set());
+  const [stateFilter, setStateFilter] = useState<string | undefined>(undefined);
 
   const { searchTerm, setSearchTerm, filteredItems: filteredAgents } = useSearch(
-    chatAgents,
-    ['agents.0.name', 'agents.0.description']
+    agents,
+    ['id', 'serviceName']
   );
 
-  const handleDelete = (chatagentsId: string) => {
+  // 챗 에이전트 목록 조회
+  useEffect(() => {
+    const fetchAgents = async () => {
+      setLoading(true);
+      try {
+        // 현재 로그인한 사용자 ID (임시로 'admin-1' 사용)
+        const currentUserId = 'admin-1';
+        
+        const response = await chatAgentApi.getAgents({
+          userId: currentUserId,
+          state: stateFilter // 상태 필터 적용
+        });
+
+        if (response.data.agents) {
+          setAgents(response.data.agents);
+        }
+      } catch (error) {
+        console.error('챗 에이전트 목록 조회 실패:', error);
+        // 에러 시 목업 데이터 사용
+        setAgents(mockAgents);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAgents();
+  }, [stateFilter]);
+
+  const handleDelete = (agentId: string) => {
     if (confirm('정말로 이 챗 에이전트를 삭제하시겠습니까?')) {
-      setChatAgents(prev => prev.filter(agent => agent.chatagentsId !== chatagentsId));
+      setAgents(prev => prev.filter(agent => agent.id !== agentId));
     }
   };
 
-  const handleToggleState = (chatagentsId: string) => {
-    setChatAgents(prev => prev.map(agent => 
-      agent.chatagentsId === chatagentsId 
-        ? { ...agent, state: agent.state === 'active' ? 'inactive' : 'active' }
-        : agent
-    ));
+  const handleToggleState = async (agentId: string) => {
+    const agent = agents.find(a => a.id === agentId);
+    if (!agent) return;
+
+    const newState = agent.state === 'active' ? 'inactive' : 'active';
+    
+    // 로딩 상태 추가
+    setTogglingStates(prev => new Set(prev).add(agentId));
+    
+    try {
+      const response = await chatAgentApi.updateState({
+        chatAgentId: agentId,
+        state: newState
+      });
+
+      if (response.data.result === 'success') {
+        // 성공 시 로컬 상태 업데이트
+        setAgents(prev => prev.map(a => 
+          a.id === agentId 
+            ? { ...a, state: newState }
+            : a
+        ));
+        
+        const statusText = newState === 'active' ? '활성화' : '비활성화';
+        alert(`챗 에이전트가 ${statusText}되었습니다.`);
+      } else {
+        alert('챗 에이전트 상태 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('챗 에이전트 상태 변경 실패:', error);
+      alert('챗 에이전트 상태 변경 중 오류가 발생했습니다.');
+    } finally {
+      // 로딩 상태 제거
+      setTogglingStates(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(agentId);
+        return newSet;
+      });
+    }
   };
 
   const handleOpenSettings = (agent: Agent) => {
@@ -65,39 +124,19 @@ export default function ChatAgents() {
   const handleSaveAgent = (agent: Agent) => {
     if (selectedAgent) {
       // 수정
-      setChatAgents(prev => prev.map(chatAgent => ({
-        ...chatAgent,
-        agents: chatAgent.agents.map(a => 
-          a.agentId === agent.agentId ? agent : a
-        )
-      })));
+      setAgents(prev => prev.map(a => 
+        a.id === agent.id ? agent : a
+      ));
     } else {
       // 생성
-      const newChatAgent: ChatAgent = {
-        chatagentsId: `chatagents_${Date.now()}`,
-        serviceId: `service_${Date.now()}`,
+      const newAgent: Agent = {
+        id: `agent_${Date.now()}`,
+        serviceName: agent.serviceName,
         state: 'active',
-        agents: [agent]
+        userId: agent.userId,
+        ...agent
       };
-      setChatAgents(prev => [...prev, newChatAgent]);
-    }
-  };
-
-  const handleDownloadDocument = (document: any) => {
-    // 실제로는 API를 통해 파일을 다운로드
-    console.log('Downloading document:', document.documentName);
-  };
-
-  const handleDeleteDocument = (agentId: string, docId: string) => {
-    if (confirm('이 문서를 삭제하시겠습니까?')) {
-      setChatAgents(prev => prev.map(chatAgent => ({
-        ...chatAgent,
-        agents: chatAgent.agents.map(agent => 
-          agent.agentId === agentId 
-            ? { ...agent, documents: agent.documents?.filter(doc => doc.docsId !== docId) || [] }
-            : agent
-        )
-      })));
+      setAgents(prev => [...prev, newAgent]);
     }
   };
 
@@ -143,7 +182,7 @@ export default function ChatAgents() {
         </Button>
       </PageHeader>
 
-      {/* 검색 */}
+      {/* 검색 및 필터 */}
       <div className="flex space-x-4">
         <div className="flex-1">
           <SearchInput
@@ -152,12 +191,35 @@ export default function ChatAgents() {
             onChange={setSearchTerm}
           />
         </div>
+        <div className="flex space-x-2">
+          <Button
+            variant={stateFilter === undefined ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setStateFilter(undefined)}
+          >
+            전체
+          </Button>
+          <Button
+            variant={stateFilter === 'active' ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setStateFilter('active')}
+          >
+            활성
+          </Button>
+          <Button
+            variant={stateFilter === 'inactive' ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setStateFilter('inactive')}
+          >
+            비활성
+          </Button>
+        </div>
       </div>
 
       {/* 에이전트 목록 */}
       <div className="grid grid-cols-1 gap-6">
         {filteredAgents.map((agent) => (
-          <Card key={agent.chatagentsId}>
+          <Card key={agent.id}>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0">
@@ -167,35 +229,32 @@ export default function ChatAgents() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-medium text-gray-900">
-                    {agent.agents[0]?.name || '이름 없음'}
+                    {agent.serviceName}
                   </h3>
-                  <p className="text-sm text-gray-500">
-                    {agent.agents[0]?.description || '설명 없음'}
-                  </p>
                   <div className="mt-2 flex items-center space-x-4">
                     <StatusBadge
                       status={getStateText(agent.state)}
                       variant={getStateVariant(agent.state)}
                     />
                     <span className="text-xs text-gray-500">
-                      ID: {agent.chatagentsId}
+                      ID: {agent.id}
                     </span>
                   </div>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <Link to={`/chat/${agent.serviceId}`}>
-                  <Button variant="outline" size="sm">
-                    <MessageSquare className="h-4 w-4 mr-1" />
-                    채팅
-                  </Button>
-                </Link>
                 <Button
                   variant={agent.state === 'active' ? 'secondary' : 'primary'}
                   size="sm"
-                  onClick={() => handleToggleState(agent.chatagentsId)}
+                  onClick={() => handleToggleState(agent.id)}
+                  disabled={togglingStates.has(agent.id)}
                 >
-                  {agent.state === 'active' ? (
+                  {togglingStates.has(agent.id) ? (
+                    <>
+                      <div className="h-4 w-4 mr-1 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+                      처리 중...
+                    </>
+                  ) : agent.state === 'active' ? (
                     <>
                       <Pause className="h-4 w-4 mr-1" />
                       일시정지
@@ -210,110 +269,18 @@ export default function ChatAgents() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => handleOpenSettings(agent.agents[0])}
+                  onClick={() => handleOpenSettings(agent)}
                 >
-                  <Settings className="h-4 w-4" />
+                  <Settings className="h-4 w-4 mr-1" />
+                  설정
                 </Button>
                 <Button
                   variant="danger"
                   size="sm"
-                  onClick={() => handleDelete(agent.chatagentsId)}
+                  onClick={() => handleDelete(agent.id)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
-              </div>
-            </div>
-            
-            {/* 에이전트 상세 정보 */}
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">프롬프트</dt>
-                  <dd className="mt-1 text-sm text-gray-900">
-                    {agent.agents[0]?.prompt || '프롬프트 없음'}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">API URL</dt>
-                  <dd className="mt-1 text-sm text-gray-900">
-                    {agent.agents[0]?.apiUrl || 'URL 없음'}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">메서드</dt>
-                  <dd className="mt-1 text-sm text-gray-900">
-                    {agent.agents[0]?.method || '메서드 없음'}
-                  </dd>
-                </div>
-              </div>
-              
-              {/* 연결된 리소스 */}
-              <div className="space-y-3">
-                <div>
-                  <dt className="text-sm font-medium text-gray-500 mb-2 flex items-center">
-                    <FileText className="h-4 w-4 mr-1" />
-                    첨부된 문서 ({agent.agents[0]?.documents?.length || 0}개)
-                  </dt>
-                  <dd className="text-sm text-gray-900">
-                    {agent.agents[0]?.documents?.length ? (
-                      <div className="space-y-2">
-                        {agent.agents[0].documents.map((doc) => (
-                          <div key={doc.docsId} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
-                            <div className="flex items-center space-x-2">
-                              <FileText className="h-4 w-4 text-gray-400" />
-                              <span className="text-sm">{doc.documentName}</span>
-                              <span className="text-xs text-gray-500">({doc.type})</span>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDownloadDocument(doc)}
-                                title="다운로드"
-                              >
-                                <Download className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteDocument(agent.agents[0].agentId, doc.docsId)}
-                                title="삭제"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      '첨부된 문서 없음'
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500 mb-2 flex items-center">
-                    <Brain className="h-4 w-4 mr-1" />
-                    연결된 모델 ({agent.agents[0]?.connectedModels?.length || 0}개)
-                  </dt>
-                  <dd className="text-sm text-gray-900">
-                    {agent.agents[0]?.connectedModels?.length ? 
-                      agent.agents[0].connectedModels.join(', ') : 
-                      '연결된 모델 없음'
-                    }
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500 mb-2 flex items-center">
-                    <Server className="h-4 w-4 mr-1" />
-                    연결된 MCP 서버 ({agent.agents[0]?.connectedMCPServers?.length || 0}개)
-                  </dt>
-                  <dd className="text-sm text-gray-900">
-                    {agent.agents[0]?.connectedMCPServers?.length ? 
-                      agent.agents[0].connectedMCPServers.join(', ') : 
-                      '연결된 MCP 서버 없음'
-                    }
-                  </dd>
-                </div>
               </div>
             </div>
           </Card>

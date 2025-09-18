@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Plus, 
   Server, 
@@ -8,9 +8,10 @@ import {
   PowerOff,
   CheckCircle,
   XCircle,
-  Wrench
+  RefreshCw,
+  User
 } from 'lucide-react';
-import type { MCPServer, MCPTool } from '../types';
+import type { MCPServer } from '../types';
 import { 
   PageHeader, 
   Card, 
@@ -18,31 +19,64 @@ import {
   SearchInput, 
   StatusBadge, 
   EmptyState,
-  LoadingPage,
-  Modal,
-  ModalFooter
+  LoadingPage
 } from '../components/ui';
-import { useAsyncData, useSearch, useModal } from '../hooks';
+import { useSearch } from '../hooks';
 import { mockMCPServers } from '../data';
 import MCPServerModal from '../components/MCPServerModal';
+import { mcpApi } from '../services/api';
 
 export default function MCPServers() {
-  const { data: servers = [], loading } = useAsyncData<MCPServer[]>(() => mockMCPServers);
+  const [servers, setServers] = useState<MCPServer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { searchTerm, setSearchTerm, filteredItems: filteredServers } = useSearch(
     servers,
     ['name', 'description']
   );
 
-  const toolsModal = useModal();
-  const [selectedServer, setSelectedServer] = useState<MCPServer | null>(null);
+  const fetchMCPServers = async () => {
+    try {
+      const response = await mcpApi.getMCPServers();
+      setServers(response.data.mcpServers || []);
+    } catch (error) {
+      console.error('MCP 서버 목록 조회 실패:', error);
+      // 에러 시 mock 데이터 사용
+      setServers(mockMCPServers);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMCPServers();
+  }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchMCPServers();
+  };
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMCPServer, setSelectedMCPServer] = useState<MCPServer | null>(null);
 
-  const handleDelete = (mcpId: string) => {
+  const handleDelete = async (mcpId: string) => {
     if (confirm('정말로 이 MCP 서버를 삭제하시겠습니까?')) {
-      // 실제로는 API 호출
-      console.log('Delete MCP server:', mcpId);
+      try {
+        const response = await mcpApi.delete(mcpId);
+        
+        if (response.data.result === 'success') {
+          alert('MCP 서버가 성공적으로 삭제되었습니다.');
+          handleRefresh(); // 목록 새로고침
+        } else {
+          alert('MCP 서버 삭제에 실패했습니다.');
+        }
+      } catch (error) {
+        console.error('MCP 서버 삭제 실패:', error);
+        alert('MCP 서버 삭제 중 오류가 발생했습니다.');
+      }
     }
   };
 
@@ -51,10 +85,6 @@ export default function MCPServers() {
     console.log('Toggle MCP server:', mcpId);
   };
 
-  const handleShowTools = (server: MCPServer) => {
-    setSelectedServer(server);
-    toolsModal.open();
-  };
 
   const handleOpenSettings = (mcpId: string) => {
     const server = servers.find(s => s.mcpId === mcpId);
@@ -72,16 +102,16 @@ export default function MCPServers() {
     console.log('Save MCP server:', server);
   };
 
-  const getStatusVariant = (useable: boolean) => {
-    return useable ? 'success' : 'error';
+  const getStatusVariant = (state: string) => {
+    return state === 'active' ? 'success' : 'error';
   };
 
-  const getStatusText = (useable: boolean) => {
-    return useable ? '활성' : '비활성';
+  const getStatusText = (state: string) => {
+    return state === 'active' ? '활성' : '비활성';
   };
 
-  const getStatusIcon = (useable: boolean) => {
-    return useable ? CheckCircle : XCircle;
+  const getStatusIcon = (state: string) => {
+    return state === 'active' ? CheckCircle : XCircle;
   };
 
   if (loading) {
@@ -94,10 +124,21 @@ export default function MCPServers() {
         title="MCP 서버"
         description="MCP 서버를 관리하고 도구를 확인하세요."
       >
-        <Button onClick={handleCreateServer}>
-          <Plus className="h-4 w-4 mr-2" />
-          새 서버
-        </Button>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            새로고침
+          </Button>
+          <Button onClick={handleCreateServer}>
+            <Plus className="h-4 w-4 mr-2" />
+            새 서버
+          </Button>
+        </div>
       </PageHeader>
 
       {/* 검색 */}
@@ -114,9 +155,9 @@ export default function MCPServers() {
       {/* 서버 목록 */}
       <div className="grid grid-cols-1 gap-6">
         {filteredServers.map((server) => {
-          const StatusIcon = getStatusIcon(server.useable);
+          const StatusIcon = getStatusIcon(server.state);
           return (
-            <Card key={server.mcpId}>
+            <Card key={server.mcpId || server.name}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0">
@@ -129,37 +170,35 @@ export default function MCPServers() {
                       {server.name}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {server.description}
+                      {server.description || '설명 없음'}
                     </p>
                     <div className="mt-2 flex items-center space-x-4">
                       <StatusBadge
-                        status={getStatusText(server.useable)}
-                        variant={getStatusVariant(server.useable)}
+                        status={getStatusText(server.state)}
+                        variant={getStatusVariant(server.state)}
                       />
                       <span className="text-xs text-gray-500">
-                        URL: {server.serverUrl}
+                        URL: {server.mcpUrl}
                       </span>
                       <span className="text-xs text-gray-500">
                         도구: {server.tools.length}개
                       </span>
+                      <div className="flex items-center space-x-1">
+                        <User className="h-3 w-3 text-gray-400" />
+                        <span className="text-xs text-gray-500">
+                          에이전트: {server.chatagentId}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Button
-                    variant="outline"
+                    variant={server.state === 'active' ? 'secondary' : 'primary'}
                     size="sm"
-                    onClick={() => handleShowTools(server)}
+                    onClick={() => handleToggleUseable(server.mcpId || server.name)}
                   >
-                    <Wrench className="h-4 w-4 mr-1" />
-                    도구 보기
-                  </Button>
-                  <Button
-                    variant={server.useable ? 'secondary' : 'primary'}
-                    size="sm"
-                    onClick={() => handleToggleUseable(server.mcpId)}
-                  >
-                    {server.useable ? (
+                    {server.state === 'active' ? (
                       <>
                         <PowerOff className="h-4 w-4 mr-1" />
                         비활성화
@@ -174,14 +213,14 @@ export default function MCPServers() {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => handleOpenSettings(server.mcpId)}
+                    onClick={() => handleOpenSettings(server.mcpId || server.name)}
                   >
                     <Settings className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => handleDelete(server.mcpId)}
+                    onClick={() => handleDelete(server.mcpId || server.name)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -202,37 +241,6 @@ export default function MCPServers() {
         />
       )}
 
-      {/* 도구 모달 */}
-      <Modal
-        isOpen={toolsModal.isOpen}
-        onClose={toolsModal.close}
-        title={selectedServer ? `${selectedServer.name} - 도구 목록` : '도구 목록'}
-        size="lg"
-        footer={
-          <ModalFooter>
-            <Button variant="secondary" onClick={toolsModal.close}>
-              닫기
-            </Button>
-          </ModalFooter>
-        }
-      >
-        {selectedServer && (
-          <div className="space-y-4">
-            {selectedServer.tools.map((tool, index) => (
-              <Card key={index} padding="sm">
-                <h4 className="font-medium text-gray-900">{tool.name}</h4>
-                <p className="text-sm text-gray-500 mt-1">{tool.description}</p>
-                <div className="mt-2">
-                  <span className="text-xs font-medium text-gray-700">매개변수:</span>
-                  <pre className="text-xs text-gray-600 mt-1 bg-gray-50 p-2 rounded">
-                    {JSON.stringify(tool.parameter, null, 2)}
-                  </pre>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </Modal>
 
       {/* MCP 서버 모달 */}
       <MCPServerModal
@@ -240,6 +248,7 @@ export default function MCPServers() {
         mcpServer={selectedMCPServer}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveServer}
+        onRefresh={handleRefresh}
       />
     </div>
   );

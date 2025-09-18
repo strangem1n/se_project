@@ -1,17 +1,7 @@
 import axios from 'axios';
 import type {
-  User,
-  ChatAgent,
   ChatMessage,
-  Document,
-  Model,
-  Adaptor,
-  MCPServer,
-  MCPTool,
-  ChatUsage,
-  DocumentUsage,
-  MCPUsage,
-  ApiResponse
+  AgentDetail
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -27,6 +17,32 @@ const api = axios.create({
 
 // 챗 에이전트 API
 export const chatAgentApi = {
+  // 챗 에이전트 목록 조회
+  getAgents: (params: {
+    userId: string;
+    state?: string;
+  }) => api.get('/be/v1/chatagents', { params }),
+
+  // 챗 에이전트 상세보기
+  getAgentDetail: (chatagentId: string) => 
+    api.get<AgentDetail>(`/be/v1/chatagents/${chatagentId}`),
+
+  // 챗 에이전트 생성 (새로운 구조)
+  createAgent: (data: {
+    devServiceName: string;
+    userId: string;
+    embeddingModelId: string;
+    mcpIds: string[];
+    finetuneDocs: string[];
+    ragDocs: string[];
+  }) => api.post('/be/v1/chatagents', data),
+
+  // 챗 에이전트 상태 변경
+  updateState: (data: {
+    chatAgentId: string;
+    state: string;
+  }) => api.patch('/be/v1/chatagents', data),
+
   // 메시지 송신
   sendMessage: (serviceId: string, message: ChatMessage) =>
     api.post(`/be/v1/chatagents/${serviceId}`, message),
@@ -53,7 +69,7 @@ export const chatAgentApi = {
       params: { historyId }
     }),
 
-  // 챗 에이전트 추가
+  // 챗 에이전트 추가 (기존 구조 - 호환성 유지)
   create: (data: {
     name: string;
     serviceId: string;
@@ -80,7 +96,19 @@ export const chatAgentApi = {
 
 // 문서 API
 export const documentApi = {
-  // 문서 추가
+  // 문서 추가 (챗 에이전트용)
+  uploadToAgent: (chatagentId: string, formData: FormData) =>
+    api.post(`/be/v1/docs/${chatagentId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+
+  // 여러 문서 삭제 (챗 에이전트별)
+  deleteMultipleDocs: (chatagentId: string, docsIds: string[]) =>
+    api.delete(`/be/v1/docs/chatagent/${chatagentId}`, {
+      data: { docsIds }
+    }),
+
+  // 문서 추가 (서비스용 - 기존)
   upload: (serviceId: string, formData: FormData) =>
     api.post(`/be/v1/docs/${serviceId}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
@@ -109,11 +137,18 @@ export const modelApi = {
   chunk: (data: { serviceId: string; docsId: string[]; chunkSize: number }) =>
     api.post('/be/v1/models/chunk', data),
 
-  // 모델 조회
-  getModels: (modelId?: string) =>
+  // 모델 목록 조회
+  getModels: () => api.get('/be/v1/models'),
+
+  // 모델 조회 (기존)
+  getModel: (modelId?: string) =>
     api.get('/be/v1/models', { params: { modelId } }),
 
-  // 어댑터 조회
+  // 어댑터 목록 조회 (챗 에이전트별)
+  getAdapters: (chatagentId: string) =>
+    api.get(`/be/v1/adapters/${chatagentId}`),
+
+  // 어댑터 조회 (기존)
   getAdaptors: (adaptorId?: string) =>
     api.get('/be/v1/models', { params: { adaptorId } }),
 };
@@ -139,13 +174,27 @@ export const userApi = {
 
 // MCP Server API
 export const mcpApi = {
-  // Server URL 추가
-  create: (data: { name: string; description: string; serverUrl: string }) =>
-    api.post('/be/v1/mcps', data),
+  // MCP 서버 목록 조회
+  getMCPServers: () => api.get('/be/v1/mcps'),
 
-  // Server URL 삭제
+  // MCP 서버 생성
+  create: (data: { 
+    name: string; 
+    serverUrl: string; 
+    chatAgentId?: string | null;
+  }) => api.post('/be/v1/mcps', data),
+
+  // MCP 서버 삭제
   delete: (mcpId: string) =>
-    api.delete(`/be/v1/mcps/${mcpId}`),
+    api.post(`/be/v1/mcps/${mcpId}`),
+
+  // 챗 에이전트 MCP 서버 선택
+  selectForAgent: (chatagentId: string, data: {
+    mcpIds: Array<{
+      mcpId: string;
+      isUsing: boolean;
+    }>;
+  }) => api.post(`/be/v1/mcps/chatagent/${chatagentId}`, data),
 
   // 상세 Tools 조회
   getTools: (mcpId: string) =>
@@ -202,6 +251,19 @@ export const guideApi = {
   // 가이드 파일 삭제
   delete: (guideId: string) =>
     api.delete(`/be/v1/managers/guides/${guideId}`),
+};
+
+// Chat API
+export const chatApi = {
+  // 챗봇 메시지 전송
+  sendMessage: (chatagentId: string, data: {
+    userId: string;
+    type: 'chat' | 'input' | 'approve';
+    content: string;
+    resumeKey?: string;
+    taskId?: string;
+    payload?: any;
+  }) => api.post(`/be/v1/chatagents/${chatagentId}`, data),
 };
 
 export default api;

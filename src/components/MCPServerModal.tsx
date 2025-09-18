@@ -2,49 +2,56 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { Button } from './ui';
 import type { MCPServer, MCPTool } from '../types';
+import { mcpApi } from '../services/api';
 
 interface MCPServerModalProps {
   isOpen: boolean;
   mcpServer: MCPServer | null;
   onClose: () => void;
   onSave: (mcpServer: MCPServer) => void;
+  onRefresh?: () => void;
 }
 
 export default function MCPServerModal({
   isOpen,
   mcpServer,
   onClose,
-  onSave
+  onSave,
+  onRefresh
 }: MCPServerModalProps) {
   const [formData, setFormData] = useState({
     name: '',
-    description: '',
     serverUrl: '',
-    useable: true,
+    chatAgentId: '',
+    description: '',
+    state: 'active',
     tools: [] as MCPTool[]
   });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (mcpServer) {
       setFormData({
         name: mcpServer.name,
-        description: mcpServer.description,
-        serverUrl: mcpServer.serverUrl,
-        useable: mcpServer.useable,
+        serverUrl: mcpServer.mcpUrl || mcpServer.serverUrl || '',
+        chatAgentId: mcpServer.chatagentId || '',
+        description: mcpServer.description || '',
+        state: mcpServer.state || 'active',
         tools: mcpServer.tools || []
       });
     } else {
       setFormData({
         name: '',
-        description: '',
         serverUrl: '',
-        useable: true,
+        chatAgentId: '',
+        description: '',
+        state: 'active',
         tools: []
       });
     }
   }, [mcpServer]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name.trim()) {
       alert('MCP 서버 이름을 입력해주세요.');
       return;
@@ -55,24 +62,34 @@ export default function MCPServerModal({
       return;
     }
 
-    const updatedMCPServer: MCPServer = {
-      mcpId: mcpServer?.mcpId || `mcp_${Date.now()}`,
-      name: formData.name,
-      description: formData.description,
-      serverUrl: formData.serverUrl,
-      useable: formData.useable,
-      tools: formData.tools
-    };
+    setSaving(true);
+    try {
+      const response = await mcpApi.create({
+        name: formData.name,
+        serverUrl: formData.serverUrl,
+        chatAgentId: formData.chatAgentId || null
+      });
 
-    onSave(updatedMCPServer);
-    onClose();
+      if (response.data.result === 'success') {
+        alert('MCP 서버가 성공적으로 생성되었습니다.');
+        onRefresh?.();
+        onClose();
+      } else {
+        alert('MCP 서버 생성에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('MCP 서버 생성 실패:', error);
+      alert('MCP 서버 생성 중 오류가 발생했습니다.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const addTool = () => {
     const newTool: MCPTool = {
       name: '',
       description: '',
-      parameter: {}
+      params: {}
     };
     setFormData(prev => ({
       ...prev,
@@ -100,8 +117,8 @@ export default function MCPServerModal({
     const tool = formData.tools[toolIndex];
     const newParamName = prompt('새 파라미터 이름을 입력하세요:');
     if (newParamName) {
-      updateTool(toolIndex, 'parameter', {
-        ...tool.parameter,
+      updateTool(toolIndex, 'params', {
+        ...tool.params,
         [newParamName]: 'string'
       });
     }
@@ -109,9 +126,9 @@ export default function MCPServerModal({
 
   const removeParameter = (toolIndex: number, paramName: string) => {
     const tool = formData.tools[toolIndex];
-    const newParams = { ...tool.parameter };
+    const newParams = { ...tool.params };
     delete newParams[paramName];
-    updateTool(toolIndex, 'parameter', newParams);
+    updateTool(toolIndex, 'params', newParams);
   };
 
   if (!isOpen) return null;
@@ -157,16 +174,15 @@ export default function MCPServerModal({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    사용 가능 여부
+                    챗 에이전트 ID (선택사항)
                   </label>
-                  <select
-                    value={formData.useable ? 'true' : 'false'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, useable: e.target.value === 'true' }))}
+                  <input
+                    type="text"
+                    value={formData.chatAgentId}
+                    onChange={(e) => setFormData(prev => ({ ...prev, chatAgentId: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="true">사용 가능</option>
-                    <option value="false">사용 불가</option>
-                  </select>
+                    placeholder="연결할 챗 에이전트 ID"
+                  />
                 </div>
               </div>
 
@@ -266,25 +282,25 @@ export default function MCPServerModal({
                       </div>
 
                       <div className="space-y-2">
-                        {Object.entries(tool.parameter).map(([paramName, paramType]) => (
+                        {Object.entries(tool.params).map(([paramName, paramType]) => (
                           <div key={paramName} className="flex items-center space-x-2">
                             <input
                               type="text"
                               value={paramName}
                               onChange={(e) => {
-                                const newParams = { ...tool.parameter };
+                                const newParams = { ...tool.params };
                                 delete newParams[paramName];
                                 newParams[e.target.value] = paramType;
-                                updateTool(index, 'parameter', newParams);
+                                updateTool(index, 'params', newParams);
                               }}
                               className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <select
                               value={paramType}
                               onChange={(e) => {
-                                const newParams = { ...tool.parameter };
+                                const newParams = { ...tool.params };
                                 newParams[paramName] = e.target.value;
-                                updateTool(index, 'parameter', newParams);
+                                updateTool(index, 'params', newParams);
                               }}
                               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
@@ -319,11 +335,11 @@ export default function MCPServerModal({
 
           {/* 푸터 */}
           <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={saving}>
               취소
             </Button>
-            <Button onClick={handleSave}>
-              {mcpServer ? '수정' : '생성'}
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? '생성 중...' : '생성'}
             </Button>
           </div>
         </div>
