@@ -22,6 +22,7 @@ export interface Agent {
   documents?: Document[]; // 첨부된 문서들
   connectedModels?: string[]; // 연결된 모델 ID들
   connectedMCPServers?: string[]; // 연결된 MCP 서버 ID들
+  connectedAdapters?: string[]; // 연결된 어댑터 ID들
 }
 
 // 챗 에이전트 상세보기 응답 타입

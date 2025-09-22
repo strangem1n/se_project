@@ -6,8 +6,6 @@ import {
   Settings,
   Power,
   PowerOff,
-  CheckCircle,
-  XCircle,
   RefreshCw,
   User
 } from 'lucide-react';
@@ -22,7 +20,6 @@ import {
   LoadingPage
 } from '../components/ui';
 import { useSearch } from '../hooks';
-import { mockMCPServers } from '../data';
 import MCPServerModal from '../components/MCPServerModal';
 import { mcpApi } from '../services/api';
 
@@ -42,8 +39,7 @@ export default function MCPServers() {
       setServers(response.data.mcpServers || []);
     } catch (error) {
       console.error('MCP 서버 목록 조회 실패:', error);
-      // 에러 시 mock 데이터 사용
-      setServers(mockMCPServers);
+      setServers([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -80,9 +76,27 @@ export default function MCPServers() {
     }
   };
 
-  const handleToggleUseable = (mcpId: string) => {
-    // 실제로는 API 호출
-    console.log('Toggle MCP server:', mcpId);
+  const handleToggleState = async (mcpId: string) => {
+    try {
+      const server = servers.find(s => s.mcpId === mcpId || s.name === mcpId);
+      if (!server) return;
+
+      const newState = server.state === 'active' ? 'inactive' : 'active';
+      
+      // 실제 API 호출 (MCP 서버 상태 변경 API가 있다면 사용)
+      // await mcpApi.updateState(mcpId, newState);
+      
+      // 로컬 상태 업데이트
+      setServers(prev => prev.map(s => 
+        (s.mcpId === mcpId || s.name === mcpId) 
+          ? { ...s, state: newState }
+          : s
+      ));
+      
+      console.log(`MCP 서버 상태 변경: ${mcpId} -> ${newState}`);
+    } catch (error) {
+      console.error('MCP 서버 상태 변경 실패:', error);
+    }
   };
 
 
@@ -107,12 +121,9 @@ export default function MCPServers() {
   };
 
   const getStatusText = (state: string) => {
-    return state === 'active' ? '활성' : '비활성';
+    return state === 'active' ? '실행 중' : '일시정지';
   };
 
-  const getStatusIcon = (state: string) => {
-    return state === 'active' ? CheckCircle : XCircle;
-  };
 
   if (loading) {
     return <LoadingPage />;
@@ -154,9 +165,7 @@ export default function MCPServers() {
 
       {/* 서버 목록 */}
       <div className="grid grid-cols-1 gap-6">
-        {filteredServers.map((server) => {
-          const StatusIcon = getStatusIcon(server.state);
-          return (
+        {filteredServers.map((server) => (
             <Card key={server.mcpId || server.name}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
@@ -196,17 +205,17 @@ export default function MCPServers() {
                   <Button
                     variant={server.state === 'active' ? 'secondary' : 'primary'}
                     size="sm"
-                    onClick={() => handleToggleUseable(server.mcpId || server.name)}
+                    onClick={() => handleToggleState(server.mcpId || server.name)}
                   >
                     {server.state === 'active' ? (
                       <>
                         <PowerOff className="h-4 w-4 mr-1" />
-                        비활성화
+                        일시정지
                       </>
                     ) : (
                       <>
                         <Power className="h-4 w-4 mr-1" />
-                        활성화
+                        시작
                       </>
                     )}
                   </Button>
@@ -227,8 +236,7 @@ export default function MCPServers() {
                 </div>
               </div>
             </Card>
-          );
-        })}
+        ))}
       </div>
 
       {filteredServers.length === 0 && (

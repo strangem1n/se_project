@@ -12,9 +12,7 @@ import {
   Button, 
   LoadingPage 
 } from '../components/ui';
-import { useAsyncData } from '../hooks';
-import { mockModels, mockAdaptors } from '../data';
-import { modelApi } from '../services/api';
+import { modelApi, chatAgentApi } from '../services/api';
 
 export default function Models() {
   const [activeTab, setActiveTab] = useState<'models' | 'adaptors'>('models');
@@ -23,6 +21,7 @@ export default function Models() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedChatAgent, setSelectedChatAgent] = useState<string>('');
+  const [chatAgents, setChatAgents] = useState<any[]>([]);
 
   const fetchModels = async () => {
     try {
@@ -30,16 +29,26 @@ export default function Models() {
       setModels(response.data.models || []);
     } catch (error) {
       console.error('모델 목록 조회 실패:', error);
-      // 에러 시 mock 데이터 사용
-      setModels(mockModels);
+      setModels([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
+  const fetchChatAgents = async () => {
+    try {
+      const response = await chatAgentApi.getAgents({ userId: 'admin-1' });
+      setChatAgents(response.data.agents || []);
+    } catch (error) {
+      console.error('챗 에이전트 목록 조회 실패:', error);
+      setChatAgents([]);
+    }
+  };
+
   useEffect(() => {
     fetchModels();
+    fetchChatAgents();
   }, []);
 
   const handleRefresh = async () => {
@@ -57,8 +66,7 @@ export default function Models() {
       setAdapters(response.data.adapters || []);
     } catch (error) {
       console.error('어댑터 목록 조회 실패:', error);
-      // 에러 시 mock 데이터 사용
-      setAdapters(mockAdaptors);
+      setAdapters([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -143,8 +151,9 @@ export default function Models() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 gap-6">
-            {models.map((model) => (
+          {models.length > 0 ? (
+            <div className="grid grid-cols-1 gap-6">
+              {models.map((model) => (
               <Card key={model.id}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
@@ -198,14 +207,13 @@ export default function Models() {
                   </div>
                 </div>
               </Card>
-            ))}
-          </div>
-
-          {models.length === 0 && (
+              ))}
+            </div>
+          ) : (
             <div className="text-center py-12">
-              <Brain className="mx-auto h-12 w-12 text-gray-300" />
+              <Brain className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">모델이 없습니다</h3>
-              <p className="mt-1 text-sm text-gray-500">새로운 모델을 추가해보세요.</p>
+              <p className="mt-1 text-sm text-gray-500">사용 가능한 모델이 없습니다.</p>
             </div>
           )}
         </div>
@@ -227,10 +235,11 @@ export default function Models() {
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">챗 에이전트를 선택하세요</option>
-                <option value="agent-1">고객 서비스</option>
-                <option value="agent-2">기술 지원</option>
-                <option value="agent-3">영업 상담</option>
-                <option value="agent-4">제품 문의</option>
+                {chatAgents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.serviceName}
+                  </option>
+                ))}
               </select>
               <Button
                 variant="outline"
@@ -250,7 +259,7 @@ export default function Models() {
               <h3 className="mt-2 text-sm font-medium text-gray-900">챗 에이전트를 선택하세요</h3>
               <p className="mt-1 text-sm text-gray-500">어댑터를 조회하려면 먼저 챗 에이전트를 선택해주세요.</p>
             </div>
-          ) : (
+          ) : adapters.length > 0 ? (
             <div className="grid grid-cols-1 gap-6">
               {adapters.map((adaptor) => (
                 <Card key={adaptor.id}>
@@ -290,14 +299,12 @@ export default function Models() {
                   </div>
                 </Card>
               ))}
-
-              {adapters.length === 0 && selectedChatAgent && (
-                <div className="text-center py-12">
-                  <Settings className="mx-auto h-12 w-12 text-gray-300" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">어댑터가 없습니다</h3>
-                  <p className="mt-1 text-sm text-gray-500">선택한 챗 에이전트에 연결된 어댑터가 없습니다.</p>
-                </div>
-              )}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <Settings className="mx-auto h-12 w-12 text-gray-300" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">어댑터가 없습니다</h3>
+              <p className="mt-1 text-sm text-gray-500">선택한 챗 에이전트에 연결된 어댑터가 없습니다.</p>
             </div>
           )}
         </div>

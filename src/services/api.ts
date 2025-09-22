@@ -144,13 +144,14 @@ export const modelApi = {
   getModel: (modelId?: string) =>
     api.get('/be/v1/models', { params: { modelId } }),
 
-  // 어댑터 목록 조회 (챗 에이전트별)
-  getAdapters: (chatagentId: string) =>
-    api.get(`/be/v1/adapters/${chatagentId}`),
 
   // 어댑터 조회 (기존)
   getAdaptors: (adaptorId?: string) =>
     api.get('/be/v1/models', { params: { adaptorId } }),
+
+  // 어댑터 목록 조회 (챗 에이전트별)
+  getAdapters: (chatagentId: string) =>
+    api.get(`/be/v1/adapters/${chatagentId}`),
 };
 
 // 사용자 API
